@@ -28,5 +28,15 @@
       default = self.packages.${pkgs.system}.nix-track-pr;
       nix-track-pr = pkgs.callPackage ./package.nix {};
     });
+    devShells = forAllSystems (pkgs: {
+      default = self.devShells.${pkgs.system}.zig_0_15;
+      zig_0_15 = pkgs.mkShell {
+        name = "nix-track-pr";
+        nativeBuildInputs = [
+          pkgs.zig_0_15
+          pkgs.pinact
+        ];
+      };
+    });
   };
 }
