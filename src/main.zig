@@ -1,5 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
+const options = @import("options");
 
 const gh = @import("lib/gh.zig");
 const git = @import("lib/git.zig");
@@ -31,6 +32,11 @@ pub fn main() !u8 {
 
         _ = args.skip();
         while (args.next()) |arg| {
+            if (std.mem.eql(u8, arg, "--version")) {
+                std.debug.print("nix-track-pr {f}\n", .{options.version});
+                return 0;
+            }
+
             const pr = std.fmt.parseUnsigned(u64, arg, 10) catch |err| {
                 std.debug.print("PR numbers must be valid integers. ({t})\n", .{err});
                 return 1;

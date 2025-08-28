@@ -3,6 +3,12 @@ const std = @import("std");
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+
+    const version = std.SemanticVersion.parse(b.option([]const u8, "version", "application version string") orelse @import("build.zig.zon").version) catch unreachable;
+
+    const options = b.addOptions();
+    options.addOption(std.SemanticVersion, "version", version);
+
     const exe = b.addExecutable(.{
         .name = "nix-track-pr",
         .root_module = b.createModule(.{
@@ -11,6 +17,8 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
+
+    exe.root_module.addOptions("options", options);
 
     b.installArtifact(exe);
 
