@@ -46,19 +46,30 @@ pub fn clone(alloc: Allocator, git_dir: []const u8) !void {
     }
 }
 
-pub fn fetch(alloc: Allocator, git_dir: []const u8) !void {
+pub fn fetch(alloc: Allocator, branches: [][]const u8, git_dir: []const u8) !void {
+    var command: std.ArrayList([]const u8) = .empty;
+    defer {
+        for (command.items) |arg| alloc.free(arg);
+        command.deinit(alloc);
+    }
+    try command.append(alloc, try alloc.dupe(u8, "git"));
+    try command.append(alloc, try alloc.dupe(u8, "fetch"));
+    try command.append(alloc, try alloc.dupe(u8, "--prune"));
+    try command.append(alloc, try alloc.dupe(u8, "--no-write-fetch-head"));
+    try command.append(alloc, try alloc.dupe(u8, "origin"));
+
+    for (branches) |branch| {
+        const refspec = try std.fmt.allocPrint(alloc, "{s}:{s}", .{ branch, branch });
+        errdefer alloc.free(refspec);
+        try command.append(alloc, refspec);
+    }
+
     var env_map = try std.process.getEnvMap(alloc);
     defer env_map.deinit();
     try env_map.put("NO_COLOR", "1");
 
     var exe: std.process.Child = .init(
-        &.{
-            "git",
-            "fetch",
-            "origin",
-            "--prune",
-            "--no-write-fetch-head",
-        },
+        command.items,
         alloc,
     );
 

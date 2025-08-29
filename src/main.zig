@@ -56,17 +56,14 @@ pub fn main() !u8 {
     defer alloc.free(git_dir);
 
     nixpkgs: {
-        {
-            var dir = std.fs.openDirAbsolute(git_dir, .{}) catch |err| switch (err) {
-                error.FileNotFound => {
-                    try git.clone(alloc, git_dir);
-                    break :nixpkgs;
-                },
-                else => |e| return e,
-            };
-            defer dir.close();
-        }
-        try git.fetch(alloc, git_dir);
+        var dir = std.fs.openDirAbsolute(git_dir, .{}) catch |err| switch (err) {
+            error.FileNotFound => {
+                try git.clone(alloc, git_dir);
+                break :nixpkgs;
+            },
+            else => |e| return e,
+        };
+        defer dir.close();
     }
 
     var prs: std.ArrayList(gh.PR) = .empty;
@@ -83,11 +80,52 @@ pub fn main() !u8 {
         try prs.append(alloc, pr);
     }
 
+    var branches: std.ArrayList([]const u8) = .empty;
+    defer {
+        for (branches.items) |branch| alloc.free(branch);
+        branches.deinit(alloc);
+    }
+
     // minimum width of title field needs to be at least 6
     var max_title_len: usize = 6;
-    for (prs.items) |pr| {
-        if (pr.title.len > max_title_len) max_title_len = pr.title.len;
+
+    {
+        // this will be a map of all of the branches that we need to
+        // check, for all PRs
+        var branch_map: std.StringArrayHashMapUnmanaged(bool) = .empty;
+        errdefer {
+            for (branch_map.keys()) |branch| alloc.free(branch);
+            branch_map.deinit(alloc);
+        }
+
+        for (prs.items) |pr| {
+            if (pr.title.len > max_title_len) max_title_len = pr.title.len;
+
+            // get a list of all the branches that this PR needs us to check
+            const branches_to_check = try nixpkgs.branchesToCheck(alloc, pr.base_ref);
+            defer {
+                for (branches_to_check) |branch| alloc.free(branch);
+                alloc.free(branches_to_check);
+            }
+            // add any new branch to the map
+            for (branches_to_check) |branch| {
+                if (branch_map.get(branch)) |_| continue;
+                try branch_map.putNoClobber(alloc, try alloc.dupe(u8, branch), true);
+            }
+        }
+
+        // add all the map keys to the branches list
+        for (branch_map.keys()) |branch| {
+            try branches.append(alloc, branch);
+        }
+
+        branch_map.deinit(alloc);
     }
+
+    // so that we can sort them
+    std.mem.sort([]const u8, branches.items, void, lessThan);
+
+    try git.fetch(alloc, branches.items, git_dir);
 
     for (prs.items, 0..) |pr, i| {
         if (i == 0) {
@@ -160,4 +198,8 @@ pub fn main() !u8 {
     try stdout.flush(); // Don't forget to flush!
 
     return 0;
+}
+
+fn lessThan(_: void, lhs: []const u8, rhs: []const u8) bool {
+    return std.mem.lessThan(u8, lhs, rhs);
 }
