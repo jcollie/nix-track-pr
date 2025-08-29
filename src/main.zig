@@ -123,7 +123,7 @@ pub fn main() !u8 {
     }
 
     // so that we can sort them
-    std.mem.sort([]const u8, branches.items, void, lessThan);
+    std.mem.sort([]const u8, branches.items, {}, lessThan);
 
     try git.fetch(alloc, branches.items, git_dir);
 

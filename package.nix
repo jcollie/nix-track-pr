@@ -13,7 +13,7 @@ let
 in
 stdenv.mkDerivation {
   pname = "nix-track-pr";
-  version = "0.2.0";
+  version = "0.2.1";
   src = ./.;
   nativeBuildInputs = [
     makeWrapper
