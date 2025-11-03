@@ -3,6 +3,7 @@ const Allocator = std.mem.Allocator;
 
 pub fn branchesToCheck(alloc: Allocator, branch: []const u8) ![][]const u8 {
     const release_prefix = "release-";
+
     var list: std.ArrayList([]const u8) = .empty;
     errdefer {
         for (list.items) |item| alloc.free(item);
@@ -21,6 +22,15 @@ pub fn branchesToCheck(alloc: Allocator, branch: []const u8) ![][]const u8 {
     if (std.mem.eql(u8, branch, "staging")) {
         const branches = [_][]const u8{
             "staging",
+            "staging-next",
+        };
+        for (branches) |b| {
+            try list.append(alloc, try alloc.dupe(u8, b));
+        }
+    }
+
+    if (std.mem.eql(u8, branch, "staging-next")) {
+        const branches = [_][]const u8{
             "staging-next",
         };
         for (branches) |b| {
