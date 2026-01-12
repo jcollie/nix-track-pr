@@ -6,18 +6,19 @@
   makeWrapper,
   zig_0_15,
 }:
-let
-  zig_hook = zig_0_15.hook.overrideAttrs {
-    zig_default_flags = "-Dcpu=baseline -Doptimize=ReleaseFast --color off";
-  };
-in
 stdenv.mkDerivation {
   pname = "nix-track-pr";
   version = "0.2.1";
   src = ./.;
   nativeBuildInputs = [
     makeWrapper
-    zig_hook
+    zig_0_15
+  ];
+  dontSetZigDefaultFlags = true;
+  zigBuildFlags = [
+    "-Dcpu=baseline"
+    "-Doptimize=ReleaseFast"
+    "--color off"
   ];
   postFixup = ''
     wrapProgram $out/bin/nix-track-pr \
