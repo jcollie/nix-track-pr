@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: © 2025 Jeffrey C. Ollie <jeff@ocjtech.us> -->
+<!-- SPDX-License-Identifier: MIT -->
+
 # nix-track-pr
 
 A CLI tool for tracking the status of `nixpkgs` pull requests as they work their

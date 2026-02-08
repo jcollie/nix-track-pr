@@ -1,0 +1,11 @@
+version = 1
+
+[[annotations]]
+path = "flake.lock"
+SPDX-FileCopyrightText = "NONE"
+SPDX-License-Identifier = "CC0-1.0"
+
+[[annotations]]
+path = "assets/screenshot1.png"
+SPDX-FileCopyrightText = "NONE"
+SPDX-License-Identifier = "MIT"

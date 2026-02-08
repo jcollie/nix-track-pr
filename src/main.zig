@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: © 2025 Jeffrey C. Ollie <jeff@ocjtech.us>
+// SPDX-License-Identifier: MIT
+
 const std = @import("std");
 const builtin = @import("builtin");
 const options = @import("options");
@@ -6,28 +9,19 @@ const gh = @import("lib/gh.zig");
 const git = @import("lib/git.zig");
 const nixpkgs = @import("lib/nixpkgs.zig");
 
-var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
-
-pub fn main() !u8 {
-    const alloc, const is_debug = allocator: {
-        break :allocator switch (builtin.mode) {
-            .Debug, .ReleaseSafe => .{ debug_allocator.allocator(), true },
-            .ReleaseFast, .ReleaseSmall => .{ std.heap.smp_allocator, false },
-        };
-    };
-    defer if (is_debug) {
-        _ = debug_allocator.deinit();
-    };
+pub fn main(init: std.process.Init) !u8 {
+    const alloc = init.gpa;
+    const io = init.io;
 
     var stdout_buffer: [64]u8 = undefined;
-    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+    var stdout_writer: std.Io.File.Writer = .init(.stdout(), io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
 
     const pr_numbers = prs: {
         var l: std.ArrayList(u64) = .empty;
         errdefer l.deinit(alloc);
 
-        var args = try std.process.argsWithAllocator(alloc);
+        var args = try init.minimal.args.iterateAllocator(alloc);
         errdefer args.deinit();
 
         _ = args.skip();
@@ -52,19 +46,20 @@ pub fn main() !u8 {
         return 1;
     }
 
-    const git_dir = try git.dir(alloc);
-    defer alloc.free(git_dir);
+    var git_dir = try git.dir(io, init.environ_map);
+    defer git_dir.close(io);
 
-    nixpkgs: {
-        var dir = std.fs.openDirAbsolute(git_dir, .{}) catch |err| switch (err) {
-            error.FileNotFound => {
-                try git.clone(alloc, git_dir);
-                break :nixpkgs;
-            },
-            else => |e| return e,
-        };
-        defer dir.close();
-    }
+    var git_env = try git.env(alloc, init.environ_map);
+    defer git_env.deinit();
+
+    git_dir.access(io, "HEAD", .{ .read = true }) catch |err| switch (err) {
+        error.FileNotFound => {
+            try git.clone(io, git_dir, &git_env);
+        },
+        else => |e| return e,
+    };
+
+    try git_dir.access(io, "HEAD", .{ .read = true });
 
     var prs: std.ArrayList(gh.PR) = .empty;
     defer {
@@ -73,7 +68,7 @@ pub fn main() !u8 {
     }
 
     for (pr_numbers) |pr_number| {
-        const pr = try gh.PR.view(alloc, pr_number, git_dir) orelse {
+        const pr = try gh.PR.view(alloc, io, pr_number, git_dir, &git_env) orelse {
             std.debug.print("{d} does not appear to be a valid PR number!\n", .{pr_number});
             continue;
         };
@@ -125,7 +120,7 @@ pub fn main() !u8 {
     // so that we can sort them
     std.mem.sort([]const u8, branches.items, {}, lessThan);
 
-    try git.fetch(alloc, branches.items, git_dir);
+    try git.fetch(alloc, io, branches.items, git_dir, &git_env);
 
     for (prs.items, 0..) |pr, i| {
         if (i == 0) {
@@ -174,7 +169,7 @@ pub fn main() !u8 {
         for (branches_to_check) |branch| {
             merged: {
                 if (pr.commit) |commit| {
-                    if (try git.isAncestor(alloc, branch, commit, git_dir)) {
+                    if (try git.isAncestor(io, branch, commit, git_dir, &git_env)) {
                         try stdout.print("┃ {s:<20} │ 🟢", .{branch});
                         break :merged;
                     }

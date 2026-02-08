@@ -1,9 +1,18 @@
+# SPDX-FileCopyrightText: © 2025 Jeffrey C. Ollie <jeff@ocjtech.us>
+# SPDX-License-Identifier: MIT
+
 {
   description = "nix-track-pr";
 
   inputs = {
     nixpkgs = {
-      url = "nixpkgs/nixos-unstable";
+      url = "https://channels.nixos.org/nixpkgs-unstable/nixexprs.tar.xz";
+    };
+    zig = {
+      url = "git+https://git.ocjtech.us/jeff/zig-overlay.git";
+      inputs = {
+        nixpkgs.follows = "nixpkgs";
+      };
     };
   };
 
@@ -11,6 +20,7 @@
     {
       self,
       nixpkgs,
+      zig,
       ...
     }:
     let
@@ -31,15 +41,18 @@
     {
       packages = forAllSystems (pkgs: {
         default = self.packages.${pkgs.stdenv.hostPlatform.system}.nix-track-pr;
-        nix-track-pr = pkgs.callPackage ./package.nix { };
+        nix-track-pr = pkgs.callPackage ./package.nix {
+          zig_0_16 = zig.packages.${pkgs.stdenv.hostPlatform.system}.master;
+        };
       });
       devShells = forAllSystems (pkgs: {
-        default = self.devShells.${pkgs.stdenv.hostPlatform.system}.zig_0_15;
-        zig_0_15 = pkgs.mkShell {
-          name = "nix-track-pr";
+        default = self.devShells.${pkgs.stdenv.hostPlatform.system}.zig_0_16;
+        zig_0_16 = pkgs.mkShell {
+          name = "nex-track-pr";
           nativeBuildInputs = [
-            pkgs.zig_0_15
+            zig.packages.${pkgs.stdenv.hostPlatform.system}.master
             pkgs.pinact
+            pkgs.reuse
           ];
         };
       });

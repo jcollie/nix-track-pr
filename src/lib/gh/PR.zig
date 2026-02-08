@@ -1,7 +1,14 @@
+// SPDX-FileCopyrightText: © 2025 Jeffrey C. Ollie <jeff@ocjtech.us>
+// SPDX-License-Identifier: MIT
+
 const PR = @This();
 
 const std = @import("std");
+const options = @import("options");
+
 const Allocator = std.mem.Allocator;
+
+const collect = @import("../collect.zig").collect;
 
 pub const State = enum {
     closed,
@@ -15,47 +22,44 @@ title: []const u8,
 base_ref: []const u8,
 commit: ?[]const u8,
 
-pub fn view(alloc: Allocator, pr_number: u64, git_dir: []const u8) !?PR {
+pub fn view(alloc: Allocator, io: std.Io, pr_number: u64, git_dir: std.Io.Dir, git_env: *const std.process.Environ.Map) !?PR {
     const str = try std.fmt.allocPrint(alloc, "{d}", .{pr_number});
     defer alloc.free(str);
 
-    var env_map = try std.process.getEnvMap(alloc);
-    defer env_map.deinit();
-    try env_map.put("NO_COLOR", "1");
-
-    var exe: std.process.Child = .init(
-        &.{
-            "gh",
-            "pr",
-            "view",
-            str,
-            "--json",
-            "baseRefName,mergeCommit,state,title",
+    var exe = try std.process.spawn(
+        io,
+        .{
+            .argv = &.{
+                options.gh,
+                "pr",
+                "view",
+                str,
+                "--json",
+                "baseRefName,mergeCommit,state,title",
+            },
+            .environ_map = git_env,
+            .cwd = .{ .dir = git_dir },
+            .stdin = .ignore,
+            .stdout = .pipe,
+            .stderr = .inherit,
         },
-        alloc,
     );
 
-    exe.env_map = &env_map;
-    exe.cwd = git_dir;
+    var collect_stdout = try io.concurrent(
+        collect,
+        .{ alloc, io, exe.stdout },
+    );
+    defer _ = collect_stdout.cancel(io) catch {};
 
-    exe.stdin_behavior = .Ignore;
-    exe.stdout_behavior = .Pipe;
-    exe.stderr_behavior = .Pipe;
+    const stdout = try collect_stdout.await(io);
+    defer alloc.free(stdout);
 
-    var stdout: std.ArrayList(u8) = .empty;
-    defer stdout.deinit(alloc);
-
-    var stderr: std.ArrayList(u8) = .empty;
-    defer stderr.deinit(alloc);
-
-    try exe.spawn();
-    try exe.collectOutput(alloc, &stdout, &stderr, std.math.maxInt(u16));
-    const rc = try exe.wait();
+    const rc = try exe.wait(io);
     switch (rc) {
-        .Exited => |code| {
+        .exited => |code| {
             if (code != 0) return null;
         },
-        .Signal, .Stopped, .Unknown => return error.GHFailed,
+        .signal, .stopped, .unknown => return error.GHFailed,
     }
 
     const Result = struct {
@@ -70,7 +74,7 @@ pub fn view(alloc: Allocator, pr_number: u64, git_dir: []const u8) !?PR {
     const parsed = try std.json.parseFromSlice(
         Result,
         alloc,
-        stdout.items,
+        stdout,
         .{ .ignore_unknown_fields = true },
     );
     defer parsed.deinit();

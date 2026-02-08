@@ -1,18 +1,21 @@
+# SPDX-FileCopyrightText: © 2025 Jeffrey C. Ollie <jeff@ocjtech.us>
+# SPDX-License-Identifier: MIT
+
 {
   lib,
   stdenv,
   gh,
   git,
   makeWrapper,
-  zig_0_15,
+  zig_0_16,
 }:
 stdenv.mkDerivation {
   pname = "nix-track-pr";
-  version = "0.2.1";
+  version = "0.3.0";
   src = ./.;
   nativeBuildInputs = [
     makeWrapper
-    zig_0_15
+    zig_0_16
   ];
   dontSetZigDefaultFlags = true;
   zigBuildFlags = [
